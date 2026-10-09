@@ -1,0 +1,114 @@
+name: Build Protocol Sakha APK and EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Prepare Project
+        run: |
+          mkdir -p www build
+          cp index.html www/index.html
+          cp icon.png build/icon.png
+          if [ -f native-shim.js ]; then cp native-shim.js www/; fi
+          cp -f *.ttf www/ 2>/dev/null || true
+          cp -f *.png www/ 2>/dev/null || true
+          if [ -d assets ]; then cp -r assets www/; fi
+
+      - name: Install Dependencies
+        run: |
+          npm install --no-audit --no-fund
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+
+      - name: Create Android Project
+        run: npx cap add android
+
+      - name: Sync Android Project
+        run: npx cap sync android
+
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Protocol-Sakha-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+  build-exe:
+    name: Build Windows EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Prepare Project
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path www, build
+          Copy-Item index.html www/index.html
+          Copy-Item icon.png build/icon.png
+
+          if (Test-Path native-shim.js) {
+            Copy-Item native-shim.js www/
+          }
+
+          Get-ChildItem -Filter *.ttf |
+            Copy-Item -Destination www/
+
+          Get-ChildItem -Filter *.png |
+            Copy-Item -Destination www/
+
+          if (Test-Path assets) {
+            Copy-Item assets www/ -Recurse -Force
+          }
+
+      - name: Install Dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build EXE
+        run: npx electron-builder --win portable --x64
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: Protocol-Sakha-EXE
+          path: dist/*.exe
+          if-no-files-found: error
