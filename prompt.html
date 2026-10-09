@@ -1,0 +1,12 @@
+<!doctype html><html><head><meta charset="utf-8"><title>PROTOCOL SAKHA</title>
+<style>body{font-family:Segoe UI,Nirmala UI,sans-serif;margin:0;padding:16px;background:#f4f6fb}
+#m{white-space:pre-wrap;margin-bottom:10px;font-size:14px}input{width:100%;box-sizing:border-box;padding:8px;font-size:15px}
+.r{text-align:right;margin-top:12px}button{padding:7px 18px;margin-left:8px;font-size:14px}</style></head>
+<body><div id="m"></div><input id="v" autofocus><div class="r"><button id="ok">OK</button><button id="no">Cancel</button></div>
+<script>
+const q=new URLSearchParams(location.search);
+document.getElementById('m').textContent=q.get('m')||'';const v=document.getElementById('v');v.value=q.get('d')||'';
+function done(x){window.promptAPI.done(x)}
+document.getElementById('ok').onclick=()=>done(v.value);document.getElementById('no').onclick=()=>done(null);
+v.addEventListener('keydown',e=>{if(e.key==='Enter')done(v.value);if(e.key==='Escape')done(null)});v.select();
+</script></body></html>

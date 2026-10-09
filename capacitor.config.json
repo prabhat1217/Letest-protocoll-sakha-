@@ -1,0 +1,13 @@
+{
+  "appId": "com.protocolsakha.app",
+  "appName": "PROTOCOL SAKHA",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": true
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

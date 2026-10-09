@@ -1,0 +1,36 @@
+{
+  "name": "protocol-sakha",
+  "productName": "PROTOCOL SAKHA",
+  "version": "1.0.0",
+  "description": "PROTOCOL SAKHA",
+  "main": "main.js",
+  "author": "Protocol Shakha",
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.protocolsakha.app",
+    "productName": "PROTOCOL SAKHA",
+    "files": [
+      "main.js",
+      "preload.js",
+      "prompt.html",
+      "prompt-preload.js",
+      "www/**/*",
+      "build/icon.png"
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "PROTOCOL-SAKHA.exe"
+    }
+  }
+}
