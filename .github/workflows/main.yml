@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -29,79 +29,125 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Prepare Android project
-        shell: bash
+      - name: Configure Android SDK
         run: |
-          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
 
-          test -f index.html
-          test -f package.json
-          test -f capacitor.config.json
-          test -f icon.png
-          test -f icon-foreground.png
-          test -f icon-background.png
-          test -f native-shim.js
-          test -f native-plugins-entry.js
-          test -f NotoSansGujarati-Regular.ttf
-          test -f NotoSansGujarati-Bold.ttf
+          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" \
+            -type f -name sdkmanager | sort -V | tail -n 1)
 
-          mkdir -p cap/www/assets cap/www/lib cap/assets
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::Android SDK Manager not found"
+            exit 1
+          fi
 
-          cp index.html cap/www/index.html
-          cp native-shim.js cap/www/native-shim.js
+          yes | "$SDKMANAGER" \
+            --sdk_root="$SDK_ROOT" --licenses || true
 
-          cp NotoSansGujarati-Regular.ttf \
-             NotoSansGujarati-Bold.ttf cap/www/assets/
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
 
-          cp icon.png icon-foreground.png \
-             icon-background.png cap/assets/
+      - name: Install Dependencies
+        run: |
+          npm install --no-audit --no-fund
 
-          cp capacitor.config.json cap/
-          cp native-plugins-entry.js cap/
-
-          cd cap
-
-          npm init -y
-
-          npm install \
+          npm install --save \
             @capacitor/core@6 \
-            @capacitor/cli@6 \
             @capacitor/android@6 \
             @capacitor/filesystem@6 \
             @capacitor/share@6 \
-            @capacitor/app@6 \
             --no-audit --no-fund
 
-          npm install \
+          npm install --save-dev \
+            @capacitor/cli@6 \
+            @capacitor/assets@3 \
             html2canvas@1.4.1 \
             jspdf@2.5.1 \
             esbuild \
             --no-audit --no-fund
 
-          npx esbuild native-plugins-entry.js \
-            --bundle \
-            --platform=browser \
-            --format=iife \
-            --outfile=www/lib/native-plugins.js
+      - name: Prepare Web Assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Checking required project files..."
+
+          for file in index.html package.json capacitor.config.json; do
+            if [ ! -f "$file" ]; then
+              echo "::error::Required file missing: $file"
+              exit 1
+            fi
+          done
+
+          mkdir -p www www/assets www/lib assets build
+
+          cp index.html www/index.html
+
+          if [ -f native-shim.js ]; then
+            cp native-shim.js www/
+          fi
+
+          if [ -f native-plugins-entry.js ]; then
+            cp native-plugins-entry.js www/
+          fi
+
+          if [ -f NotoSansGujarati-Regular.ttf ]; then
+            cp NotoSansGujarati-Regular.ttf www/assets/
+          fi
+
+          if [ -f NotoSansGujarati-Bold.ttf ]; then
+            cp NotoSansGujarati-Bold.ttf www/assets/
+          fi
+
+          if [ -d assets ]; then
+            find assets -maxdepth 1 -type f \
+              -exec cp -n {} www/assets/ \;
+          fi
 
           cp node_modules/html2canvas/dist/html2canvas.min.js \
-             www/lib/html2canvas.min.js
+            www/lib/html2canvas.min.js
 
           cp node_modules/jspdf/dist/jspdf.umd.min.js \
-             www/lib/jspdf.umd.min.js
+            www/lib/jspdf.umd.min.js
 
-          npm install --save-dev @capacitor/assets@3 \
-            --no-audit --no-fund
+          if [ -f icon.png ]; then
+            cp icon.png build/icon.png
+            cp icon.png assets/icon.png
+          else
+            echo "::error::icon.png is missing"
+            exit 1
+          fi
 
+          if [ -f icon-foreground.png ]; then
+            cp icon-foreground.png assets/icon-foreground.png
+          fi
+
+          if [ -f icon-background.png ]; then
+            cp icon-background.png assets/icon-background.png
+          fi
+
+          echo "Web assets prepared."
+
+      - name: Configure Capacitor
+        run: |
           npx cap add android
+          npx cap sync android
 
+      - name: Generate Android Icons
+        run: |
           npx capacitor-assets generate --android
 
-          npx cap sync android
+      - name: Sync Android Project
+        run: npx cap sync android
 
       - name: Build Android APK
         run: |
-          cd cap/android
+          cd android
           chmod +x gradlew
           ./gradlew assembleDebug
 
@@ -109,7 +155,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PROTOCOL-SAKHA-APK
-          path: cap/android/app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
   build-exe:
@@ -117,7 +163,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -125,20 +171,38 @@ jobs:
         with:
           node-version: 20
 
-      - name: Prepare Electron assets
+      - name: Prepare Windows Assets
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force `
             -Path www, www/assets, build | Out-Null
 
+          if (!(Test-Path index.html)) {
+            throw "index.html is missing"
+          }
+
+          if (!(Test-Path icon.png)) {
+            throw "icon.png is missing"
+          }
+
           Copy-Item index.html www/index.html -Force
-
-          Copy-Item NotoSansGujarati-Regular.ttf, `
-            NotoSansGujarati-Bold.ttf www/assets/ -Force
-
           Copy-Item icon.png build/icon.png -Force
 
-      - name: Install dependencies
+          if (Test-Path NotoSansGujarati-Regular.ttf) {
+            Copy-Item NotoSansGujarati-Regular.ttf `
+              www/assets/ -Force
+          }
+
+          if (Test-Path NotoSansGujarati-Bold.ttf) {
+            Copy-Item NotoSansGujarati-Bold.ttf `
+              www/assets/ -Force
+          }
+
+          if (Test-Path assets) {
+            Copy-Item assets/* www/assets/ -Recurse -Force
+          }
+
+      - name: Install Dependencies
         run: npm install --no-audit --no-fund
 
       - name: Build Windows EXE
