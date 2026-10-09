@@ -31,24 +31,50 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platform-tools
+            platforms;android-35
+            build-tools;35.0.0
 
-      - name: Prepare Project
+      - name: Check Project Files
         run: |
-          mkdir -p www build
+          test -f index.html
+          test -f package.json
+          test -f capacitor.config.json
+
+      - name: Prepare Web Assets
+        run: |
+          mkdir -p www
           cp index.html www/index.html
-          cp icon.png build/icon.png
-          if [ -f native-shim.js ]; then cp native-shim.js www/; fi
-          cp -f *.ttf www/ 2>/dev/null || true
-          cp -f *.png www/ 2>/dev/null || true
-          if [ -d assets ]; then cp -r assets www/; fi
+
+          if [ -f native-shim.js ]; then
+            cp native-shim.js www/
+          fi
+
+          if [ -f NotoSansGujarati-Regular.ttf ]; then
+            cp NotoSansGujarati-Regular.ttf www/
+          fi
+
+          if [ -f NotoSansGujarati-Bold.ttf ]; then
+            cp NotoSansGujarati-Bold.ttf www/
+          fi
+
+          if [ -d assets ]; then
+            cp -r assets www/
+          fi
 
       - name: Install Dependencies
-        run: |
-          npm install --no-audit --no-fund
-          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+        run: npm install --no-audit --no-fund
 
-      - name: Create Android Project
-        run: npx cap add android
+      - name: Install Capacitor Android
+        run: npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 --no-audit --no-fund
+
+      - name: Add Android Platform If Missing
+        run: |
+          if [ ! -d android ]; then
+            npx cap add android
+          fi
 
       - name: Sync Android Project
         run: npx cap sync android
@@ -79,31 +105,10 @@ jobs:
         with:
           node-version: 20
 
-      - name: Prepare Project
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path www, build
-          Copy-Item index.html www/index.html
-          Copy-Item icon.png build/icon.png
-
-          if (Test-Path native-shim.js) {
-            Copy-Item native-shim.js www/
-          }
-
-          Get-ChildItem -Filter *.ttf |
-            Copy-Item -Destination www/
-
-          Get-ChildItem -Filter *.png |
-            Copy-Item -Destination www/
-
-          if (Test-Path assets) {
-            Copy-Item assets www/ -Recurse -Force
-          }
-
       - name: Install Dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Build EXE
+      - name: Build Windows EXE
         run: npx electron-builder --win portable --x64
 
       - name: Upload EXE
