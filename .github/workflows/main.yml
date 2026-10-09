@@ -1,4 +1,4 @@
-name: Build Protocol Sakha APK and EXE
+name: Build PROTOCOL SAKHA APK and EXE
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -29,83 +29,87 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Configure Android SDK
+      - name: Prepare Android project
         shell: bash
         run: |
-          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          set -euo pipefail
 
-          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)
-
-          if [ -z "$SDKMANAGER" ]; then
-            echo "ERROR: Android sdkmanager not found"
-            exit 1
-          fi
-
-          echo "Using SDK Manager: $SDKMANAGER"
-
-          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses || true
-
-          "$SDKMANAGER" --sdk_root="$SDK_ROOT" \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
-
-      - name: Check Project Files
-        run: |
           test -f index.html
           test -f package.json
           test -f capacitor.config.json
+          test -f icon.png
+          test -f icon-foreground.png
+          test -f icon-background.png
+          test -f native-shim.js
+          test -f native-plugins-entry.js
+          test -f NotoSansGujarati-Regular.ttf
+          test -f NotoSansGujarati-Bold.ttf
 
-      - name: Prepare Web Assets
+          mkdir -p cap/www/assets cap/www/lib cap/assets
+
+          cp index.html cap/www/index.html
+          cp native-shim.js cap/www/native-shim.js
+
+          cp NotoSansGujarati-Regular.ttf \
+             NotoSansGujarati-Bold.ttf cap/www/assets/
+
+          cp icon.png icon-foreground.png \
+             icon-background.png cap/assets/
+
+          cp capacitor.config.json cap/
+          cp native-plugins-entry.js cap/
+
+          cd cap
+
+          npm init -y
+
+          npm install \
+            @capacitor/core@6 \
+            @capacitor/cli@6 \
+            @capacitor/android@6 \
+            @capacitor/filesystem@6 \
+            @capacitor/share@6 \
+            @capacitor/app@6 \
+            --no-audit --no-fund
+
+          npm install \
+            html2canvas@1.4.1 \
+            jspdf@2.5.1 \
+            esbuild \
+            --no-audit --no-fund
+
+          npx esbuild native-plugins-entry.js \
+            --bundle \
+            --platform=browser \
+            --format=iife \
+            --outfile=www/lib/native-plugins.js
+
+          cp node_modules/html2canvas/dist/html2canvas.min.js \
+             www/lib/html2canvas.min.js
+
+          cp node_modules/jspdf/dist/jspdf.umd.min.js \
+             www/lib/jspdf.umd.min.js
+
+          npm install --save-dev @capacitor/assets@3 \
+            --no-audit --no-fund
+
+          npx cap add android
+
+          npx capacitor-assets generate --android
+
+          npx cap sync android
+
+      - name: Build Android APK
         run: |
-          mkdir -p www
-          cp index.html www/index.html
-
-          if [ -f native-shim.js ]; then
-            cp native-shim.js www/
-          fi
-
-          if [ -f NotoSansGujarati-Regular.ttf ]; then
-            cp NotoSansGujarati-Regular.ttf www/
-          fi
-
-          if [ -f NotoSansGujarati-Bold.ttf ]; then
-            cp NotoSansGujarati-Bold.ttf www/
-          fi
-
-          if [ -d assets ]; then
-            cp -r assets www/
-          fi
-
-      - name: Install Dependencies
-        run: npm install --no-audit --no-fund
-
-      - name: Install Capacitor Android
-        run: |
-          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 --no-audit --no-fund
-
-      - name: Add Android Platform If Missing
-        run: |
-          if [ ! -d android ]; then
-            npx cap add android
-          fi
-
-      - name: Sync Android Project
-        run: npx cap sync android
-
-      - name: Build APK
-        run: |
-          cd android
+          cd cap/android
           chmod +x gradlew
           ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Protocol-Sakha-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: PROTOCOL-SAKHA-APK
+          path: cap/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
   build-exe:
@@ -113,7 +117,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -121,15 +125,30 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Dependencies
+      - name: Prepare Electron assets
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force `
+            -Path www, www/assets, build | Out-Null
+
+          Copy-Item index.html www/index.html -Force
+
+          Copy-Item NotoSansGujarati-Regular.ttf, `
+            NotoSansGujarati-Bold.ttf www/assets/ -Force
+
+          Copy-Item icon.png build/icon.png -Force
+
+      - name: Install dependencies
         run: npm install --no-audit --no-fund
 
       - name: Build Windows EXE
         run: npx electron-builder --win portable --x64
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Upload EXE
         uses: actions/upload-artifact@v4
         with:
-          name: Protocol-Sakha-EXE
+          name: PROTOCOL-SAKHA-EXE
           path: dist/*.exe
           if-no-files-found: error
